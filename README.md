@@ -10,7 +10,7 @@ Duplicates are allowed, and the length of the list is not limited.
 
 Initialize the election with `RCV({candidate1, candidate2, ...}, [ballot1, ballot2, ...]).
 
-Example:
+*Example:*
 ```
 alfonso = Candidate('alfonso grazia-saz')
 siefken = Candidate('jason siefken')
@@ -25,4 +25,4 @@ ballot5 = Ballot([alfonso, alfonso, alfonso, alfonso, boris, siefken, boris, alf
 rcv = RCV(
   {alfonso, siefken, boris},
   [ballot1, ballot2, ballot3, ballot4, ballot5]
-)```
+)
