@@ -8,7 +8,7 @@ Create candidates with `Candidate('name')`.
 Create voting ballots with `Ballot([candidate1, candidate2, ...])`. Ballots take a list of Candidates in the order of preference, the most preferred being first.
 Duplicates are allowed, and the length of the list is not limited.
 
-Initialize the election with `RCV({candidate1, candidate2, ...}, [ballot1, ballot2, ...]).
+Initialize the election with `RCV({candidate1, candidate2, ...}, [ballot1, ballot2, ...])`. Return the winner with `RCV.get_winner()`, which evaluates the votes and returns the winning Candidate. Pass in `True` for a break-down of the computation.
 
 *Example:*
 ```
@@ -26,3 +26,5 @@ rcv = RCV(
   {alfonso, siefken, boris},
   [ballot1, ballot2, ballot3, ballot4, ballot5]
 )
+
+print(rcv.get_winner().name)
