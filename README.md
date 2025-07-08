@@ -1,5 +1,5 @@
 # ranked-choice-voting
-A simple Python implementaton for a ranked choice voting election.
+A simple Python implementaton for a [ranked choice voting](https://en.wikipedia.org/wiki/Ranked_voting) election: a fairer, more representative single-winner voting system.
 
 
 ### Instructions 
