@@ -1,6 +1,9 @@
 """A module implementing ranked choice voting."""
+from __future__ import annotations
+from dataclasses import dataclass
 
 
+@dataclass
 class Candidate:
     """A candidate in the election.
 
@@ -9,18 +12,24 @@ class Candidate:
     """
     name: str
 
-    def __init__(self, name: str) -> None:
-        self.name = name
-
     def __repr__(self) -> str:
         return self.name
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Candidate):
+            return NotImplemented
+        return self.name == other.name
 
+    def __hash__(self) -> int:
+        return hash(self.name)
+
+
+@dataclass
 class Ballot:
     """A voting ballot.
 
     Instance Attributes:
-    - ranks: the ranking of all candidates.
+    - ranks: the ranking of all candidates. The last element is the first choice.
     """
     ranks: list[Candidate]
     valid: bool
@@ -30,7 +39,15 @@ class Ballot:
         self.valid = True
 
     def __repr__(self) -> str:
-        return '(' + ', '.join([str(candidate) for candidate in self.ranks]) + ')'
+        return f"({', '.join(map(str, self.ranks))})"
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Ballot):
+            return NotImplemented
+        return self.ranks == other.ranks and self.valid == other.valid
+
+    def __hash__(self) -> int:
+        return hash(tuple(self.ranks)) ^ hash(self.valid)
 
     def shift(self, candidates: set[Candidate]) -> None:
         """Remove eliminated candidates from the ballot, until the first choice is an un-eliminated candidate
@@ -62,70 +79,79 @@ class RCV:
         """
         candidates = self.candidates
         ballots = self.ballots
-        import random
 
         if stats:
             print(f'beginning elections with {[x for x in self.candidates]}\n')
 
-        while len(ballots) > 0 and len(candidates) > 0:
+        while len(candidates) > 1:
             for ballot in ballots:
                 ballot.shift(candidates)
 
-            n = len([ballot for ballot in ballots if ballot.valid])
-            first_choices = [ballot.ranks[0] for ballot in ballots if ballot.valid]
-            vote_tally = self._tally_winner(first_choices)
-            least = n
-            elimination_candidates = []
+            vote_tally = self._tally_votes(ballots)
+            least = self._count_valid_ballots()
+            assert(least > 0), "There should be at least one valid ballot"
+            eliminated = None
 
             if stats:
                 print(f'first choice votes: {vote_tally}')
 
-            for candidate in vote_tally:
-                if vote_tally[candidate] / n > 0.5:
+            for candidate, count in vote_tally.items():
+                if count / self._count_valid_ballots() > 0.5:
+                    if stats:
+                        print(f'winner found: {candidate} with {count} votes')
                     return candidate
-                elif vote_tally[candidate] < least:
-                    least = vote_tally[candidate]
-                    elimination_candidates = [candidate]
-                elif vote_tally[candidate] == least:
-                    elimination_candidates.append(candidate)
+                elif count < least:
+                    if stats:
+                        print(f'new least candidate: {candidate} with {count} votes')
+                    least = count
+                    eliminated = candidate
+                elif count == least and eliminated:
+                    # Resolve tie
+                    if stats:
+                        print(f'tie between {candidate} and {eliminated}, resolving...')
+                    ballot_subset_1 = [ballot for ballot in ballots if ballot.valid and
+                                              ballot.ranks[0] == candidate]
+                    ballot_subset_2 = [ballot for ballot in ballots if ballot.valid and
+                                                ballot.ranks[0] == eliminated]
 
-            eliminated = random.choice(elimination_candidates)
+                    curr_level = 2
+                    # As long as we have 'valid' ballots, look for the least preferred candidate
+                    while any(len(ballot.ranks) >= curr_level for ballot in ballot_subset_1) or \
+                            any(len(ballot.ranks) >= curr_level for ballot in ballot_subset_2):
+                        votes_1 = self._tally_votes(ballot_subset_1, curr_level)
+                        votes_2 = self._tally_votes(ballot_subset_2, curr_level)
+                        if stats:
+                            print(f'votes at level {curr_level}: {votes_2[candidate]} for {candidate}, '
+                                  f'{votes_1[eliminated]} for {eliminated}')
+                        if votes_2[candidate] < votes_1[eliminated]:
+                            eliminated = candidate
+                            break
+                        elif votes_2[candidate] > votes_1[eliminated]:
+                            eliminated = eliminated
+                            break
+                        # The policy is that if there is a genuine tie, the original candidate is eliminated
+                        curr_level += 1
+
+            if eliminated is None:
+                raise ValueError("No candidate was eliminated, but there are still multiple candidates remaining.")
+
             candidates.remove(eliminated)
 
             if stats:
                 print(f'eliminated {eliminated}, remaining candidates: {candidates}\n')
 
-        return False
+        return list(candidates)[0] if len(candidates) == 1 else False
 
-    def _tally_winner(self, first_choices: list[Candidate]) -> dict[Candidate, int]:
-        """Counts the number of first choice votes that a candidate has.
+    def _tally_votes(self, ballots: list[Ballot], i: int = 1) -> dict[Candidate, int]:
+        """Counts the number of i-th choice votes that a candidate has.
         """
-        counts = dict()
-        for choice in first_choices:
-            counts[choice] = counts.get(choice, 0) + 1
+        tally = {candidate: 0 for candidate in self.candidates}
+        for ballot in ballots:
+            if ballot.valid and len(ballot.ranks) >= i and ballot.ranks[i - 1] in self.candidates:
+                tally[ballot.ranks[i - 1]] += 1
+        return tally
 
-        for candidate in self.candidates:
-            if candidate not in counts.keys():
-                counts[candidate] = 0
-
-        return counts
-
-
-if __name__ == "__main__":
-    print('printing test results\n==========')
-    david = Candidate('david liu')
-    tom = Candidate('thomas fairgrieve')
-    mario = Candidate('mario badr')
-    gazzale = Candidate('robert gazzale')
-    election = RCV({david, tom, mario, gazzale}, [
-        Ballot([david, david, david, david, david]),  # DAVID LIU FTW (ALSO BORIS KHESIN >>>>> JASON SIEFKEN)
-        Ballot([tom]),
-        Ballot([david, tom]),
-        Ballot([tom, david]),
-        Ballot([tom, mario]),
-        Ballot([mario, david, tom]),
-        Ballot([mario, tom, david]),
-        Ballot([mario]),
-        Ballot([mario])
-    ])
-    print(election.get_winner(True).name)
+    def _count_valid_ballots(self) -> int:
+        """Counts the number of valid ballots in the election.
+        """
+        return sum(1 for ballot in self.ballots if ballot.valid)
